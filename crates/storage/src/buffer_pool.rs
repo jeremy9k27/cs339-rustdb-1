@@ -128,17 +128,25 @@ impl BufferPoolManager {
         self.frames[free_frame].increment_pin_count();
         self.frames[free_frame].set_dirty(true);
         self.page_table.insert(page_id, free_frame);
+        
+        
 
         Ok(&self.frames[free_frame])
     }
 
     /// Unpins a page, allowing it to be evicted if necessary.
     pub(crate) fn unpin_page(&mut self, page_id: PageId, is_dirty: bool) {
-        if self.frames[page_id as usize].pin_count() > 0 {
-            self.frames[page_id as usize].decrement_pin_count();
+        if self.page_table.contains_key(&page_id) {
+            
+            let frame_id = self.page_table[&page_id];
+            
+            if self.frames[frame_id].pin_count() > 0 {
+                self.frames[frame_id].decrement_pin_count();
+            }
+            
+            self.replacer.unpin(frame_id);
+            self.frames[frame_id].set_dirty(is_dirty);
         }
-
-        self.frames[page_id as usize].set_dirty(is_dirty);
     }
 
     /// Deletes a page from the buffer pool and disk.

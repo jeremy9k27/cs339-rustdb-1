@@ -74,23 +74,71 @@ impl BufferPoolManager {
 
     /// Allocates a new page and loads it into a free frame.
     fn create_page(&mut self) -> Result<&mut PageFrame> {
-        todo!();
+
+        let free_frame = self.get_free_frame()?;
+        let mut disk = self.disk_manager.lock()?;
+        let new_page = disk.allocate_page()?;
+
+        self.frames[free_frame].set_page_id(new_page);
+        self.frames[free_frame].set_dirty(true);
+        self.frames[free_frame].increment_pin_count();
+
+        self.page_table.insert(new_page, free_frame);
+
+        Ok(&mut self.frames[free_frame])
         
     }
 
     /// Fetches a mutable reference to a page, loading it from disk if necessary.
     fn fetch_page_mut(&mut self, page_id: PageId) -> Result<&mut PageFrame> {
-todo!();
+
+        if self.page_table.contains_key(&page_id) {
+            return Ok(&mut self.frames[page_id as usize]);
+        }
+        
+        let free_frame = self.get_free_frame()?;
+        let mut disk = self.disk_manager.lock()?;
+        let page_bytes = disk.read(page_id)?;
+        let page_data: &[u8] = &page_bytes.as_ref().unwrap();
+
+        
+        self.frames[free_frame].set_page_id(page_id);
+        self.frames[free_frame].write(0, page_data);
+        self.frames[free_frame].increment_pin_count();
+        self.frames[free_frame].set_dirty(true);
+        self.page_table.insert(page_id, free_frame);
+
+        Ok(&mut self.frames[free_frame])
     }
 
     /// Fetches an immutable reference to a page.
     fn fetch_page(&mut self, page_id: PageId) -> Result<&PageFrame> {
-todo!();
+        if self.page_table.contains_key(&page_id) {
+            return Ok(&mut self.frames[self.page_table[&page_id]]);
+        }
+
+        let free_frame = self.get_free_frame()?;
+        let mut disk = self.disk_manager.lock()?;
+        let page_bytes = disk.read(page_id)?;
+        let page_data: &[u8] = &page_bytes.as_ref().unwrap();
+
+
+        self.frames[free_frame].set_page_id(page_id);
+        self.frames[free_frame].write(0, page_data);
+        self.frames[free_frame].increment_pin_count();
+        self.frames[free_frame].set_dirty(true);
+        self.page_table.insert(page_id, free_frame);
+
+        Ok(&self.frames[free_frame])
     }
 
     /// Unpins a page, allowing it to be evicted if necessary.
     pub(crate) fn unpin_page(&mut self, page_id: PageId, is_dirty: bool) {
-todo!();
+        if self.frames[page_id as usize].pin_count() > 0 {
+            self.frames[page_id as usize].decrement_pin_count();
+        }
+
+        self.frames[page_id as usize].set_dirty(is_dirty);
     }
 
     /// Deletes a page from the buffer pool and disk.

@@ -94,10 +94,11 @@ impl BufferPoolManager {
     fn fetch_page_mut(&mut self, page_id: PageId) -> Result<&mut PageFrame> {
 
         if self.page_table.contains_key(&page_id) {
-            self.frames[self.page_table[&page_id]].increment_pin_count();
-            self.replacer.record_access(self.page_table[&page_id]);
-            self.replacer.pin(self.page_table[&page_id]);
-            return Ok(&mut self.frames[self.page_table[&page_id]]);
+            let frame = self.page_table[&page_id];
+            self.frames[frame].increment_pin_count();
+            self.replacer.record_access(frame);
+            self.replacer.pin(frame);
+            return Ok(&mut self.frames[frame]);
         }
         
         let free_frame = self.get_free_frame()?;
@@ -105,12 +106,12 @@ impl BufferPoolManager {
         let page_bytes = disk.read(page_id)?;
         let page_data: &[u8] = &page_bytes.as_ref().unwrap();
 
-        
+        //read from disk
         self.frames[free_frame].set_page_id(page_id);
         self.frames[free_frame].write(0, page_data);
         self.frames[free_frame].increment_pin_count();
-        self.frames[free_frame].set_dirty(true);
-        
+        //self.frames[free_frame].set_dirty(true);
+
         self.page_table.insert(page_id, free_frame);
         self.replacer.record_access(free_frame);
         self.replacer.pin(free_frame);
@@ -120,13 +121,16 @@ impl BufferPoolManager {
 
     /// Fetches an immutable reference to a page.
     fn fetch_page(&mut self, page_id: PageId) -> Result<&PageFrame> {
+        
         if self.page_table.contains_key(&page_id) {
-            self.frames[self.page_table[&page_id]].increment_pin_count();
-            self.replacer.record_access(self.page_table[&page_id]);
-            self.replacer.pin(self.page_table[&page_id]);
-            return Ok(&mut self.frames[self.page_table[&page_id]]);
+            let frame = self.page_table[&page_id];
+            self.frames[frame].increment_pin_count();
+            self.replacer.record_access(frame);
+            self.replacer.pin(frame);
+            return Ok(&mut self.frames[frame]);
         }
 
+        // read from disk
         let free_frame = self.get_free_frame()?;
         let mut disk = self.disk_manager.lock()?;
         let page_bytes = disk.read(page_id)?;
@@ -136,8 +140,7 @@ impl BufferPoolManager {
         self.frames[free_frame].set_page_id(page_id);
         self.frames[free_frame].write(0, page_data);
         self.frames[free_frame].increment_pin_count();
-        self.frames[free_frame].set_dirty(true);
-        
+
         self.page_table.insert(page_id, free_frame);
         self.replacer.record_access(free_frame);
         self.replacer.pin(free_frame);
@@ -154,11 +157,13 @@ impl BufferPoolManager {
             if self.frames[frame_id].pin_count() > 0 {
                 self.frames[frame_id].decrement_pin_count();
             }
-            
+
             if self.frames[frame_id].pin_count() == 0 {
                 self.replacer.unpin(frame_id);
             }
-            
+
+            // ??????
+            let flushed = self.flush_page(&page_id);
             self.frames[frame_id].set_dirty(is_dirty);
         }
     }
@@ -169,27 +174,28 @@ impl BufferPoolManager {
         if !self.page_table.contains_key(&page_id) {
             return Ok(()) ;
         }
-        
-        if self.frames[self.page_table[&page_id]].pin_count() > 0 {
+
+        let frame = self.page_table[&page_id];
+        if self.frames[frame].pin_count() > 0 {
             return Err(Error::PagePinned(page_id));
         }
-        
+
         // clear frame in frames array?
-        self.frames[self.page_table[&page_id]].reset();
-        
+        self.frames[frame].reset();
+
         // remove node from replacer
-        self.replacer.remove(self.page_table[&page_id]);
-        
+        self.replacer.remove(frame);
+
         // add to free list
-        self.free_list.push_back(self.page_table[&page_id]);
-        
+        self.free_list.push_back(frame);
+
         // remove from disk
         let mut disk = self.disk_manager.lock()?;
         disk.deallocate_page(page_id)?;
 
         //remove from page table
         self.page_table.remove(&page_id);
-        
+
         Ok(())
     }
 
@@ -199,13 +205,14 @@ impl BufferPoolManager {
         if !self.page_table.contains_key(&page_id) {
             return Ok(()) ;
         }
-        
-        if self.frames[self.page_table[&page_id]].is_dirty() {
+        let frame = self.page_table[&page_id];
+        if self.frames[frame].is_dirty() {
             let mut disk = self.disk_manager.lock()?;
-            disk.write(*page_id, self.frames[self.page_table[&page_id]].data())?;
-            self.frames[self.page_table[&page_id]].set_dirty(false);
+            self.frames[frame].set_dirty(false);
+            disk.write(*page_id, self.frames[frame].data())?;
+            
         }
-        
+
         /*
         // ??
         self.frames[self.page_table[&page_id]].reset();
@@ -218,7 +225,7 @@ impl BufferPoolManager {
 
         //remove from page table
         self.page_table.remove(&page_id);
-                
+
          */
         Ok(())
 

@@ -137,25 +137,28 @@ impl Replacer for LrukReplacer {
         let mut max_frame_id = 0;
         let mut max_k_dist = 0;
         let mut earliest = u64::MAX;
-
+        let mut modded = false;
+        
         for (frame_id, node) in self.node_store.iter() {
             if (node.is_evictable == true && (node.get_backwards_k_distance(self.current_timestamp) > max_k_dist)) {
                 max_k_dist = node.get_backwards_k_distance(self.current_timestamp);
                 max_frame_id = *frame_id;
-                earliest = node.get_earliest_timestamp();                
+                earliest = node.get_earliest_timestamp();
+                modded = true;
             }
 
-            if (node.is_evictable == true && (node.get_backwards_k_distance(self.current_timestamp) == max_k_dist)) {
+            else if (node.is_evictable == true && (node.get_backwards_k_distance(self.current_timestamp) == max_k_dist)) {
                 if node.get_earliest_timestamp() < earliest {
                     max_k_dist = node.get_backwards_k_distance(self.current_timestamp);
                     max_frame_id = *frame_id;
                     earliest = node.get_earliest_timestamp();
+                    modded = true;
                 }
             }
             
         }
         
-        if max_frame_id != 0 {
+        if modded {
             self.node_store.remove(&max_frame_id);
             self.evictable_size -= 1;
             return Some(max_frame_id)

@@ -164,7 +164,15 @@ impl<T: DerefMut<Target = PageFrame> + Deref<Target = PageFrame>> TablePage<T> {
     }
 
     pub(crate) fn insert_tuple(&mut self, meta: &TupleMetadata, tuple: &Tuple) -> Result<RecordId> {
+
         let offset = self.get_next_tuple_offset(&tuple)?;
+        let needed_header_space = 4  + (4 * (self.header_mut().tuple_cnt as u16 + 1));
+
+        // Check if there is enough space for the new tuple
+        if offset <  needed_header_space {
+            return Err(Error::OutOfBounds);  // You should define an appropriate error type here
+        }
+        
 
         //write to num_tuples in mutable header
         self.header_mut().tuple_cnt += 1;
@@ -191,9 +199,10 @@ impl<T: DerefMut<Target = PageFrame> + Deref<Target = PageFrame>> TablePage<T> {
     ) -> Result<()> {
 
         let slot_id = rid.slot_id();
-        let mut tuple_info = self.slot_array()[slot_id as usize];
+        let tuple_info = &mut self.slot_array_mut()[slot_id as usize];
         
         tuple_info.metadata.set_deleted(metadata.is_deleted());
+        self.header_mut().deleted_tuple_cnt += 1;
         
         Ok(())
     }

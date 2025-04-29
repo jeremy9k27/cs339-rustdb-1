@@ -46,7 +46,8 @@ impl Iterator for TableTupleIterator {
     /// (The exception to this is an out-of-bounds error, which might signal that the current page
     /// doesn't have more tuples to emit and that the iterator should move to the next page.)
     fn next(&mut self) -> Option<Self::Item> {
-todo!();
+        
+        todo!();
     }
 }
 
@@ -58,7 +59,7 @@ mod tests {
 
     use crate::{
         buffer_pool::BufferPoolManager, disk::disk_manager::DiskManager,
-        heap::table_heap::TableHeap, record_id::RecordId, replacer::lru_replacer::LruReplacer,
+        heap::table_heap::TableHeap, replacer::lru_k_replacer::LrukReplacer,
         Result,
     };
 
@@ -69,7 +70,7 @@ mod tests {
     fn test_table_iterator() -> Result<()> {
         // Set up a test disk and buffer pool manager.
         let disk = Arc::new(Mutex::new(DiskManager::new("test.db").unwrap()));
-        let replacer = Box::new(LruReplacer::new());
+        let replacer = Box::new(LrukReplacer::new(3));
         let bpm = Arc::new(RwLock::new(BufferPoolManager::new(10, disk, replacer)));
 
         let mut table_heap = TableHeap::new("table", bpm.clone());

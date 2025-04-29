@@ -46,8 +46,46 @@ impl Iterator for TableTupleIterator {
     /// (The exception to this is an out-of-bounds error, which might signal that the current page
     /// doesn't have more tuples to emit and that the iterator should move to the next page.)
     fn next(&mut self) -> Option<Self::Item> {
+
+        loop {
+            let page_frame_handle = match BufferPoolManager::fetch_page_handle(&self.bpm, self.current_page_id) {
+                Ok(handle) => handle,
+                Err(e) => return Some(Err(e)),
+            };
+
+            let table_page = TablePageRef::from(page_frame_handle);
+
+            // get tuple
+            let num_tuples_in_page = table_page.tuple_count();
+            let slot_array = table_page.slot_array();
+
+
+            while self.current_slot < num_tuples_in_page {
+                let slot_id = self.current_slot;
+                self.current_slot += 1;
+
+                let record_id = RecordId::new(self.current_page_id, slot_id);
+                let record_id_clone = record_id.clone();
+                let packed: u64 = u64::from(record_id_clone);
+
+                match table_page.get_tuple(&record_id) {
+                    Ok((tuple_metadata, tuple)) => {
+                        if !tuple_metadata.is_deleted() {
+                            return Some(Ok((packed, tuple)));
+                        }
+                    }
+                    Err(e) => return Some(Err(e)),
+                }
+            }
+
+            // if we need next page
+            self.current_page_id = table_page.next_page_id();
+            if self.current_page_id == INVALID_PAGE_ID {
+                return None;
+            }
+            self.current_slot = 0;
+        }
         
-        todo!();
     }
 }
 

@@ -46,7 +46,46 @@ impl Iterator for TableTupleIterator {
     /// (The exception to this is an out-of-bounds error, which might signal that the current page
     /// doesn't have more tuples to emit and that the iterator should move to the next page.)
     fn next(&mut self) -> Option<Self::Item> {
-todo!();
+
+        loop {
+            let page_frame_handle = match BufferPoolManager::fetch_page_handle(&self.bpm, self.current_page_id) {
+                Ok(handle) => handle,
+                Err(e) => return Some(Err(e)),
+            };
+
+            let table_page = TablePageRef::from(page_frame_handle);
+
+            // get tuple
+            let num_tuples_in_page = table_page.tuple_count();
+            let slot_array = table_page.slot_array();
+
+
+            while self.current_slot < num_tuples_in_page {
+                let slot_id = self.current_slot;
+                self.current_slot += 1;
+
+                let record_id = RecordId::new(self.current_page_id, slot_id);
+                let record_id_clone = record_id.clone();
+                let packed: u64 = u64::from(record_id_clone);
+
+                match table_page.get_tuple(&record_id) {
+                    Ok((tuple_metadata, tuple)) => {
+                        if !tuple_metadata.is_deleted() {
+                            return Some(Ok((packed, tuple)));
+                        }
+                    }
+                    Err(e) => return Some(Err(e)),
+                }
+            }
+
+            // if we need next page
+            self.current_page_id = table_page.next_page_id();
+            if self.current_page_id == INVALID_PAGE_ID {
+                return None;
+            }
+            self.current_slot = 0;
+        }
+        
     }
 }
 
@@ -58,7 +97,7 @@ mod tests {
 
     use crate::{
         buffer_pool::BufferPoolManager, disk::disk_manager::DiskManager,
-        heap::table_heap::TableHeap, record_id::RecordId, replacer::lru_replacer::LruReplacer,
+        heap::table_heap::TableHeap, replacer::lru_k_replacer::LrukReplacer,
         Result,
     };
 
@@ -69,7 +108,7 @@ mod tests {
     fn test_table_iterator() -> Result<()> {
         // Set up a test disk and buffer pool manager.
         let disk = Arc::new(Mutex::new(DiskManager::new("test.db").unwrap()));
-        let replacer = Box::new(LruReplacer::new());
+        let replacer = Box::new(LrukReplacer::new(3));
         let bpm = Arc::new(RwLock::new(BufferPoolManager::new(10, disk, replacer)));
 
         let mut table_heap = TableHeap::new("table", bpm.clone());

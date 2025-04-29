@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
 use rustdb_catalog::tuple::Tuple;
@@ -23,17 +24,47 @@ pub struct TableHeap {
 impl TableHeap {
     /// Create a new table heap. A new root page is allocated from the buffer pool.
     pub fn new(name: &str, bpm: Arc<RwLock<BufferPoolManager>>) -> TableHeap {
-todo!();
+
+        let bpm_clone = bpm.clone();
+        let page_handle = BufferPoolManager::create_page_handle(&bpm_clone)
+            .expect("Failed to create page handle");
+        let new_page = TablePageMut::from(page_handle);
+        let new_page_id = new_page.page_id();
+        
+        Self {
+            table_name: name.parse().unwrap(),
+            bpm,
+            page_cnt: 0,
+            first_page_id: new_page_id,
+            last_page_id: new_page_id
+        }
+
     }
 
     /// Retrieve a tuple given its record id.
     pub fn get_tuple(&self, rid: &RecordId) -> Result<(TupleMetadata, Tuple)> {
-todo!();
+        
+        
+        let page_frame_handle = BufferPoolManager::fetch_page_handle(&self.bpm, rid.page_id())?;
+        let table_page = TablePageRef::from(page_frame_handle);
+
+        table_page.get_tuple(rid)
+        
     }
 
     /// Delete a tuple given its record id, returning the deleted tuple (and its metadata).
     pub fn delete_tuple(&self, rid: &RecordId) -> Result<(TupleMetadata, Tuple)> {
-todo!();
+
+        let (mut tuple_metadata, tuple) = self.get_tuple(rid)?;
+        let original_tuple_metadata = tuple_metadata.clone();
+        tuple_metadata.set_deleted(true);
+
+        let page_frame_handle = BufferPoolManager::fetch_page_mut_handle(&self.bpm, rid.page_id())?;
+        let mut table_page = TablePageMut::from(page_frame_handle);
+        let res = table_page.update_tuple_metadata(rid, tuple_metadata);
+        
+        Ok((original_tuple_metadata, tuple))
+        
     }
 
     /// Insert a tuple into the table heap.
@@ -81,7 +112,7 @@ todo!();
     }
 
     pub(crate) fn first_page_id(&self) -> PageId {
-todo!();
+        self.first_page_id
     }
 }
 

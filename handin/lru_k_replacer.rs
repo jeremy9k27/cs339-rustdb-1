@@ -140,14 +140,14 @@ impl Replacer for LrukReplacer {
         let mut modded = false;
         
         for (frame_id, node) in self.node_store.iter() {
-            if (node.is_evictable == true && (node.get_backwards_k_distance(self.current_timestamp) > max_k_dist)) {
+            if node.is_evictable == true && (node.get_backwards_k_distance(self.current_timestamp) > max_k_dist) {
                 max_k_dist = node.get_backwards_k_distance(self.current_timestamp);
                 max_frame_id = *frame_id;
                 earliest = node.get_earliest_timestamp();
                 modded = true;
             }
 
-            else if (node.is_evictable == true && (node.get_backwards_k_distance(self.current_timestamp) == max_k_dist)) {
+            else if node.is_evictable == true && (node.get_backwards_k_distance(self.current_timestamp) == max_k_dist) {
                 if node.get_earliest_timestamp() < earliest {
                     max_k_dist = node.get_backwards_k_distance(self.current_timestamp);
                     max_frame_id = *frame_id;
